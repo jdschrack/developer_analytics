@@ -11,7 +11,8 @@ export default class EpicService {
       let offsetCounter = 0;
       const epics: Set<Epic> = new Set<Epic>();
       const project = process.env.JIRA_PROJECT || 'PUP';
-      const jql = `project = ${project} and issuetype = Epic and updated >= "-90d" and "Effort type[Select List (multiple choices)]" not in ("Internal / Team(s)") ORDER BY updated DESC`;
+      //const jql = `project = ${project} and issuetype = Epic and updated >= "-90d" and "Effort type[Select List (multiple choices)]" not in ("Internal / Team(s)") ORDER BY updated DESC`;
+      const jql = `project = ${project} and issuetype = Epic and Labels = traffic-report order by status DESC`
       while (morePages) {
         const params = new URLSearchParams({
           jql: jql,
