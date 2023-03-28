@@ -3,7 +3,9 @@ import EpicService from './JiraServices/EpicService';
 import Epic from './JiraServices/Epic';
 import { dateDiff, formatDate } from './Utilities/tools';
 import dotenv from 'dotenv';
-export default async function main(): Promise<void> {
+import { RunType } from './types/RunType';
+
+export default async function main(runType: RunType): Promise<void> {
   try {
     const configResult = dotenv.config({
       path: '.env',
@@ -56,7 +58,7 @@ export default async function main(): Promise<void> {
         } else if (item.status === 'Blocked') {
           group = 'Blocked';
         }
-        statusGroups.get(group)!.push(makeEpicHtml(item));
+        statusGroups.get(group)!.push(makeEpicHtml(item, runType));
       });
 
       let output = '<html><style>' +
@@ -77,7 +79,7 @@ export default async function main(): Promise<void> {
   }
 }
 
-function makeEpicHtml(epic: Epic): string {
+function makeEpicHtml(epic: Epic, runType: RunType): string {
   let difference = 0;
   if (epic.originalDueDate && epic.dueDate) {
     const originalDate = new Date(epic.originalDueDate);
@@ -87,29 +89,39 @@ function makeEpicHtml(epic: Epic): string {
 
   let statusText = `<li>Status: ${epic.status}</li>`;
   let endDateText = `<li>Current End Date: ${formatDate(epic.dueDate)}</li>`;
+
   if (epic.status !== 'Done' && epic.status !== 'Closed') {
 
     if (difference < 8) {
-      statusText = `<li>Status: <span style="color: green; font-weight: bold">Green</span></li>`;
+      statusText = `<li>Status: <span style='color: green; font-weight: bold'>Green</span></li>`;
     }
     if (difference >= 8 && difference < 15) {
-      statusText = `<li>Status: <span style="color: yellow; font-weight: bold">Yellow</span></li>`;
+      statusText = `<li>Status: <span style='color: yellow; font-weight: bold'>Yellow</span></li>`;
     } else if (difference >= 15) {
-      statusText = `<li>Status: <span style="color: red; font-weight: bold">Red</span></li>`;
+      statusText = `<li>Status: <span style='color: red; font-weight: bold'>Red</span></li>`;
     }
   } else {
     endDateText = `<li>Completed Date: ${formatDate(epic.resolvedDate)}</li>`;
   }
 
-  const output = `
-<ul>
-  <li>${epic.parentSummary}: <a href='https://banno-jha.atlassian.net/browse/${
-    epic.parent
-  }' target='_blank'>${epic.parent}</a>
+  if (runType === RunType.EMAIL) {
+    return `
     <ul>
       <li>${epic.summary}: <a href='https://banno-jha.atlassian.net/browse/${
-    epic.key
-  }' target='_blank'>${epic.key}</a>
+      epic.key
+    }' target='_blank'>${epic.key}</a></li>
+    </ul>
+    `;
+  } else {
+    return `
+<ul>
+  <li>${epic.parentSummary}: <a href='https://banno-jha.atlassian.net/browse/${
+      epic.parent
+    }' target='_blank'>${epic.parent}</a>
+    <ul>
+      <li>${epic.summary}: <a href='https://banno-jha.atlassian.net/browse/${
+      epic.key
+    }' target='_blank'>${epic.key}</a>
         <ul>
           ${statusText}
           <li>Original End Date: ${formatDate(epic.originalDueDate)}</li>
@@ -119,5 +131,5 @@ function makeEpicHtml(epic: Epic): string {
     </ul>
   </li>
 </ul>`;
-  return output;
+  }
 }
