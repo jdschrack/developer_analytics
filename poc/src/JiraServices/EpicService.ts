@@ -29,8 +29,6 @@ export default class EpicService {
           `Getting epics from Jira. Offset: ${offsetCounter} / ${total}`,
         );
 
-        console.log(JSON.stringify(issues[0], null, 2));
-
         for (const issue of issues) {
           epics.add({
             key: issue.key,
