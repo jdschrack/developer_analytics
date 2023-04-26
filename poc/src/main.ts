@@ -33,7 +33,9 @@ export default async function main(runType: RunType): Promise<void> {
             return 0;
           });
         epic.dueDateHistory = filteredHistory;
-        epic.originalDueDate = filteredHistory ? filteredHistory[0]?.to?.toISOString().split('T')[0] : undefined;
+        epic.originalDueDate = filteredHistory
+          ? filteredHistory[0]?.to?.toISOString().split('T')[0]
+          : undefined;
       }
 
       if (runType === RunType.EMAIL) {
@@ -55,23 +57,33 @@ function makeTraffic(epics: Array<Epic>, runType: RunType): string {
     throw new Error('This function only works for traffic run type');
   }
 
-  const grouped: string[] = _.chain(epics).orderBy((epic: Epic) => [epic.parent, epic.key]).groupBy((epic: Epic) => {
-    if (epic.parent) {
-      return `<li>${epic.parentSummary}: <a href='https://banno-jha.atlassian.net/browse/${epic.parent}' target='_blank'>${epic.parent}</a>`;
-    } else {
-      return `<li>Team Initiatives:</li>`;
-    }
-  }).map((epics: Array<Epic>, key: string) => {
-    return `<ul>${key}${epics.map((epic: Epic) => {
-      return makeEpicHtml(epic, runType);
-    }).join('')}</ul>`;
-  }).value();
+  const grouped: string[] = _.chain(epics)
+    .orderBy((epic: Epic) => [epic.parent, epic.key])
+    .groupBy((epic: Epic) => {
+      if (epic.parent) {
+        return `<li>${epic.parentSummary}: <a href='https://banno-jha.atlassian.net/browse/${epic.parent}' target='_blank'>${epic.parent}</a>`;
+      } else {
+        return `<li>Team Initiatives:</li>`;
+      }
+    })
+    .map((epics: Array<Epic>, key: string) => {
+      return `<ul>${key}${epics
+        .map((epic: Epic) => {
+          return makeEpicHtml(epic, runType);
+        })
+        .join('')}</ul>`;
+    })
+    .value();
 
-  let output = '<html><style>' + 'body {' + '  font-family: Arial, Helvetica, sans-serif;' + '}' + '</style><body>';
+  let output =
+    '<html><style>' +
+    'body {' +
+    '  font-family: Arial, Helvetica, sans-serif;' +
+    '}' +
+    '</style><body>';
   output = `${output}${grouped.join('')}</body></html>`;
 
   return output;
-
 }
 
 function makeEmail(epics: Array<Epic>, runType: RunType): string {
@@ -79,7 +91,14 @@ function makeEmail(epics: Array<Epic>, runType: RunType): string {
     throw new Error('This function only works for email run type');
   }
 
-  const statusGroups: Map<string, Array<string>> = new Map([['Done', []], ['Closed', []], ['Ready for Review', []], ['In Progress', []], ['Blocked', []], ['Planning', []]]);
+  const statusGroups: Map<string, Array<string>> = new Map([
+    ['Done', []],
+    ['Closed', []],
+    ['Ready for Review', []],
+    ['In Progress', []],
+    ['Blocked', []],
+    ['Planning', []],
+  ]);
 
   epics.forEach((item: Epic) => {
     let group = 'Planning';
@@ -89,7 +108,10 @@ function makeEmail(epics: Array<Epic>, runType: RunType): string {
       group = 'Closed';
     } else if (item.status === 'Ready for Review') {
       group = 'Ready for Review';
-    } else if (item.status === 'In Progress' || item.status === 'Selected for Development') {
+    } else if (
+      item.status === 'In Progress' ||
+      item.status === 'Selected for Development'
+    ) {
       group = 'In Progress';
     } else if (item.status === 'Blocked') {
       group = 'Blocked';
@@ -97,7 +119,12 @@ function makeEmail(epics: Array<Epic>, runType: RunType): string {
     statusGroups.get(group)?.push(makeEpicHtml(item, runType));
   });
 
-  let output = '<html><style>' + 'body {' + '  font-family: Arial, Helvetica, sans-serif;' + '}' + '</style><body>';
+  let output =
+    '<html><style>' +
+    'body {' +
+    '  font-family: Arial, Helvetica, sans-serif;' +
+    '}' +
+    '</style><body>';
   for (const [status, html] of statusGroups) {
     output += `<h3>${status}</h3>`;
     output += html.join('');
@@ -109,6 +136,16 @@ function makeEmail(epics: Array<Epic>, runType: RunType): string {
 
 function makeEpicHtml(epic: Epic, runType: RunType): string {
   let difference = 0;
+
+  // console.log(epic.dueDateHistory);
+  let dueDates = _.orderBy(epic.dueDateHistory, 'to').map((x) =>
+    formatDate(x.to),
+  );
+
+  if (dueDates.indexOf(formatDate(epic.dueDate)) === -1) {
+    dueDates = [...dueDates, formatDate(epic.dueDate)];
+  }
+
   if (epic.originalDueDate && epic.dueDate) {
     const originalDate = new Date(epic.originalDueDate);
     const newDate = new Date(epic.dueDate);
@@ -116,13 +153,11 @@ function makeEpicHtml(epic: Epic, runType: RunType): string {
   }
 
   const statusText = `<li>Status: ${epic.status}</li>`;
-  let endDateText = `<li>Current End Date: ${formatDate(epic.dueDate)}</li>`;
+  let endDateText = `<li>End Date: ${dueDates?.join(', ') || 'TBD'}</li>`;
   if (epic.status === 'Done' || epic.status === 'Closed') {
-    endDateText = `<li>End Date: ${formatDate(epic.dueDate)}</li>
+    endDateText = `<li>End Date:${dueDates?.join(', ') || 'TBD'}</li>
       <li>Completd On:${formatDate(epic.resolvedDate)}</li>`;
   }
-
-
 
   if (runType === RunType.EMAIL) {
     return `
@@ -136,7 +171,6 @@ function makeEpicHtml(epic: Epic, runType: RunType): string {
       <li>${epic.summary}: <a href='https://banno-jha.atlassian.net/browse/${epic.key}' target='_blank'>${epic.key}</a>
         <ul>
           ${statusText}
-          <li>Original End Date: ${formatDate(epic.originalDueDate)}</li>
           ${endDateText}
         </ul>
       </li>
