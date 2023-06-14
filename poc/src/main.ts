@@ -1,51 +1,59 @@
 import fs from 'fs';
 import EpicService from './JiraServices/EpicService';
 import Epic from './JiraServices/Epic';
-import { dateDiff, formatDate } from './Utilities/tools';
+import { formatDate } from './Utilities/tools';
 import dotenv from 'dotenv';
 import { RunType } from './types/RunType';
-import { run } from 'node:test';
 import _ from 'lodash';
+
+function configureEnvironmentVariables(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const configResult = dotenv.config({
+        path: '.env',
+      });
+
+      if (configResult.error) {
+        reject(configResult.error);
+      }
+
+      resolve(undefined);
+    } catch (ex) {
+      reject(ex);
+    }
+  });
+}
 
 export default async function main(runType: RunType): Promise<void> {
   try {
-    const configResult = dotenv.config({
-      path: '.env',
-    });
-    if (configResult.error) {
-      throw configResult.error;
-    }
-  } catch (err) {
-    console.error(err);
-  }
-
-  try {
+    await configureEnvironmentVariables();
     const epics = await EpicService.getEpics();
-    if (epics) {
-      for (const epic of epics) {
-        const history = await EpicService.getEndDateHistory(epic.key);
-        const filteredHistory = history
-          ?.filter((item) => item.from === undefined)
-          .sort((a, b) => {
-            if (a.to && b.to) {
-              return a.to.getTime() - b.to.getTime();
-            }
-            return 0;
-          });
-        epic.dueDateHistory = filteredHistory;
-        epic.originalDueDate = filteredHistory
-          ? filteredHistory[0]?.to?.toISOString().split('T')[0]
-          : undefined;
-      }
+    if (!epics) {
+      throw new Error('No Epics Were Found with the Given Project!');
+    }
 
-      if (runType === RunType.EMAIL) {
-        const email = makeEmail(epics, runType);
-        fs.writeFileSync('output.html', email);
-      } else if (runType === RunType.TRAFFIC) {
-        const traffic = makeTraffic(epics, runType);
-        fs.writeFileSync('traffic_report_output.html', traffic);
-        //console.log(traffic);
-      }
+    for (const epic of epics) {
+      const endDateHistory = await EpicService.getEndDateHistory(epic.key);
+      const filteredEndDateHistory = endDateHistory
+        ?.filter((item) => item.from === undefined)
+        .sort((a, b) => {
+          if (a.to && b.to) {
+            return a.to.getTime() - b.to.getTime();
+          }
+          return 0;
+        });
+      epic.dueDateHistory = filteredEndDateHistory;
+      epic.originalDueDate = filteredEndDateHistory
+        ? filteredEndDateHistory[0]?.to?.toISOString().split('T')[0]
+        : undefined;
+    }
+
+    if (runType === RunType.EMAIL) {
+      const email = makeEmail(epics, runType);
+      fs.writeFileSync('output.html', email);
+    } else if (runType === RunType.TRAFFIC) {
+      const traffic = makeTraffic(epics, runType);
+      fs.writeFileSync('traffic_report_output.html', traffic);
     }
   } catch (err) {
     console.error(err);
@@ -61,7 +69,7 @@ function makeTraffic(epics: Array<Epic>, runType: RunType): string {
     .orderBy((epic: Epic) => [epic.parent, epic.key])
     .groupBy((epic: Epic) => {
       if (epic.parent) {
-        return `<li>${epic.parentSummary}: <a href='https://banno-jha.atlassian.net/browse/${epic.parent}' target='_blank'>${epic.parent}</a>`;
+        return `<li><a href='https://banno-jha.atlassian.net/browse/${epic.parent}' target='_blank'>${epic.parent}</a>: ${epic.parentSummary}</li>`;
       } else {
         return `<li>Team Initiatives:</li>`;
       }
@@ -135,9 +143,6 @@ function makeEmail(epics: Array<Epic>, runType: RunType): string {
 }
 
 function makeEpicHtml(epic: Epic, runType: RunType): string {
-  let difference = 0;
-
-  // console.log(epic.dueDateHistory);
   let dueDates = _.orderBy(epic.dueDateHistory, 'to').map((x) =>
     formatDate(x.to),
   );
@@ -146,17 +151,11 @@ function makeEpicHtml(epic: Epic, runType: RunType): string {
     dueDates = [...dueDates, formatDate(epic.dueDate)];
   }
 
-  if (epic.originalDueDate && epic.dueDate) {
-    const originalDate = new Date(epic.originalDueDate);
-    const newDate = new Date(epic.dueDate);
-    difference = dateDiff(originalDate, newDate);
-  }
-
   const statusText = `<li>Status: ${epic.status}</li>`;
   let endDateText = `<li>End Date: ${dueDates?.join(', ') || 'TBD'}</li>`;
   if (epic.status === 'Done' || epic.status === 'Closed') {
-    endDateText = `<li>End Date:${dueDates?.join(', ') || 'TBD'}</li>
-      <li>Completd On:${formatDate(epic.resolvedDate)}</li>`;
+    endDateText = `<li>End Date: ${dueDates?.join(', ') || 'TBD'}</li>
+      <li>Completd On: ${formatDate(epic.resolvedDate)}</li>`;
   }
 
   if (runType === RunType.EMAIL) {
@@ -168,12 +167,11 @@ function makeEpicHtml(epic: Epic, runType: RunType): string {
   } else {
     return `
     <ul>
-      <li>${epic.summary}: <a href='https://banno-jha.atlassian.net/browse/${epic.key}' target='_blank'>${epic.key}</a>
+      <li>${epic.summary}: <a href='https://banno-jha.atlassian.net/browse/${epic.key}' target='_blank'>${epic.key}</a></li>
         <ul>
           ${statusText}
           ${endDateText}
         </ul>
-      </li>
     </ul>`;
   }
 }
